@@ -209,10 +209,6 @@ int main(int argc, const char** argv)
       switch (readmode) {
       case CMD:
         switch (*buf_start) {
-        case '.':
-          draw_pixels(xconn, pixmap, draw_gc, edge, width, pix_pos, 1); pix_pos++; DOUT("draw pixel"); break;
-        case ' ':
-          pix_pos++; DOUT("skip pixel"); break;
         case '#':
           readmode = COLOR; DOUT("color mode"); break;
         case 'p':
