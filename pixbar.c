@@ -65,30 +65,29 @@ void set_color(xcb_connection_t* xconn, xcb_colormap_t colormap, xcb_gcontext_t 
 }
 
 void draw_pixels(xcb_connection_t* xconn, xcb_pixmap_t pixmap, xcb_gcontext_t gc,
-  edge_t edge, uint16_t length, uint16_t width, uint16_t pix_pos, uint16_t count)
+  edge_t edge, uint16_t width, uint16_t pos, uint16_t count)
 {
   const xcb_rectangle_t rect = {
-    (edge==TOP||edge==BOTTOM) ? pix_pos*length : 0,
-    (edge==LEFT||edge==RIGHT) ? pix_pos*length : 0,
-    (edge==TOP||edge==BOTTOM) ? length*count : width,
-    (edge==LEFT||edge==RIGHT) ? width : length*count
+    (edge==TOP||edge==BOTTOM) ? pos : 0,
+    (edge==TOP||edge==BOTTOM) ? 0 : pos,
+    (edge==TOP||edge==BOTTOM) ? count : width,
+    (edge==TOP||edge==BOTTOM) ? width : count
   };
   XCB(poly_fill_rectangle, xconn, pixmap, gc, 1, &rect);
 }
 
 int main(int argc, const char** argv)
 {
-  if (argc != 7) {
-    fprintf(stderr, "usage: %s <x> <y> <pixel width> <pixel length> <number> <edge>\n", argv[0]);
+  if (argc != 6) {
+    fprintf(stderr, "usage: %s <x> <y> <width> <length> <edge>\n", argv[0]);
     exit(1);
   }
   uint16_t x = strtoul(argv[1], NULL, 10);
   uint16_t y = strtoul(argv[2], NULL, 10);
   uint16_t width = strtoul(argv[3], NULL, 10);
   uint16_t length = strtoul(argv[4], NULL, 10);
-  uint16_t number = strtoul(argv[5], NULL, 10);
   edge_t edge;
-  switch (argv[6][0]) {
+  switch (argv[5][0]) {
     case 'l': edge = LEFT; break;
     case 'r': edge = RIGHT; break;
     case 't': edge = TOP; break;
@@ -107,8 +106,8 @@ int main(int argc, const char** argv)
 
   uint16_t win_x = (edge==RIGHT) ? (x-width) : x;
   uint16_t win_y = (edge==BOTTOM) ? (y-width) : y;
-  uint16_t win_width = (edge==LEFT||edge==RIGHT) ? width : length*number;
-  uint16_t win_height = (edge==LEFT||edge==RIGHT) ? length*number : width;
+  uint16_t win_width = (edge==LEFT||edge==RIGHT) ? width : length;
+  uint16_t win_height = (edge==LEFT||edge==RIGHT) ? length : width;
   uint16_t strut_size;
   switch (edge) {
     case   LEFT: strut_size = x + width; break;
@@ -117,7 +116,7 @@ int main(int argc, const char** argv)
     case BOTTOM: strut_size = screen->height_in_pixels - y + width; break;
   }
   uint16_t strut_start = (edge==LEFT||edge==RIGHT) ? y : x;
-  uint16_t strut_end = length*number;
+  uint16_t strut_end = length;
 
   xcb_colormap_t colormap = xcb_generate_id(xconn);
   XCB(create_colormap, xconn, XCB_COLORMAP_ALLOC_NONE, colormap, screen->root, screen->root_visual);
@@ -211,7 +210,7 @@ int main(int argc, const char** argv)
       case CMD:
         switch (*buf_start) {
         case '.':
-          draw_pixels(xconn, pixmap, draw_gc, edge, length, width, pix_pos, 1); pix_pos++; DOUT("draw pixel"); break;
+          draw_pixels(xconn, pixmap, draw_gc, edge, width, pix_pos, 1); pix_pos++; DOUT("draw pixel"); break;
         case ' ':
           pix_pos++; DOUT("skip pixel"); break;
         case '#':
@@ -241,7 +240,7 @@ int main(int argc, const char** argv)
         uint32_t count;
         if (!get_ul(&buf_start, buf_end, false /*hex*/, &count)) break; DVOUT(count,"d");
         readmode = CMD;
-        draw_pixels(xconn, pixmap, draw_gc, edge, length, width, pix_pos, count);
+        draw_pixels(xconn, pixmap, draw_gc, edge, width, pix_pos, count);
         pix_pos+=count;
         break;
       }
