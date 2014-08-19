@@ -211,7 +211,7 @@ int main(int argc, const char** argv)
         switch (*buf_start) {
         case '#':
           readmode = COLOR; DOUT("color mode"); break;
-        case 'p':
+        case '@':
           readmode = POS; DOUT("position mode"); break;
         case '*':
           readmode = DRAW; DOUT("draw mode"); break;
