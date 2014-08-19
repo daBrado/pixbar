@@ -237,7 +237,6 @@ int main(int argc, const char** argv)
         if (!get_ul(&buf_start, buf_end, false /*hex*/, &count)) break; DVOUT(count,"d");
         readmode = CMD;
         draw_pixels(xconn, pixmap, draw_gc, edge, width, pix_pos, count);
-        pix_pos+=count;
         break;
       }
       if (readmode==CMD && buf_start==buf_end) { buf_start=buf_end=buf; DOUT("reset buf"); }
