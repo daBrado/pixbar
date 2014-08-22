@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+
+require_relative 'config'
+require 'socket'
+Thread.abort_on_exception = true
+
+class PixBar
+  def initialize(x, y, width, length, edge)
+    @pixbar = IO.popen ["#{File.dirname $0}/pixbar",x,y,width,length,edge].map{|v|v.to_s}, 'r+'
+  end
+  def color(color)
+    @pixbar.puts "##{color}"
+  end
+  def draw(loc, width, color=nil)
+    @pixbar.puts "#{(color)?('#'+color):''}@#{loc}*#{width}"
+  end
+end
+
+leftover = LENGTH%SEGMENTS.size
+segments = [LENGTH/SEGMENTS.size]*SEGMENTS.size
+(0...leftover/2).each{|i| segments[i]+=1; segments[SEGMENTS.size-i-1]+=1}
+segments[SEGMENTS.size/2] += 1 if leftover % 2 == 1
+pos=0; segments=SEGMENTS.zip(segments.map{|s| v=[pos,s]; pos+=s; v}).to_h
+
+server = UNIXServer.new SOCKET_PATH
+at_exit { File.delete SOCKET_PATH }
+queue = Queue.new
+Thread.new do
+  loop do
+    socket = server.accept
+    Thread.new do
+      socket.each{|line| queue.push line}
+    end
+  end
+end
+
+if ENV['NOTIFY_SOCKET']
+  sysd_notify = Socket.new :UNIX, :DGRAM
+  sysd_notify.connect Socket.pack_sockaddr_un ENV['NOTIFY_SOCKET']
+  sysd_notify.puts 'READY=1'
+end
+
+pixbar = PixBar.new X, Y, WIDTH, LENGTH, EDGE
+pixbar.color COLORS.first.last
+loop do
+  line = queue.pop
+  segment, color = line.split
+  (STDERR.puts "must provide a segment and a color"; next) if !segment || !color
+  segment_pos, segment_len = segments[segment.to_sym]
+  color_value = COLORS[color.to_sym]
+  (STDERR.puts "unknown segment #{segment}"; next) if !segment_pos
+  (STDERR.puts "undefined color #{color.inspect}"; next) if !color_value
+  pixbar.draw segment_pos, segment_len, color_value
+end

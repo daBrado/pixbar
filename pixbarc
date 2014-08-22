@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+
+require_relative 'config'
+require 'socket'
+
+if ['-h','--help'].include? ARGV[0]
+  STDERR.puts "usage: #{$0} [name [status]]"
+  exit 1
+end
+
+socket = UNIXSocket.new SOCKET_PATH
+if ARGV[1]
+  socket.puts "#{ARGV[0]} #{ARGV[1]}"
+elsif ARGV[0]
+  STDIN.each{|status| socket.puts "#{ARGV[0]} #{status}"}
+else
+  STDIN.each{|line| socket.puts line}
+end

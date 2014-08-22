@@ -1,0 +1,16 @@
+SOCKET_PATH = "#{File.dirname $0}/socket"
+X = 0
+Y = 1080
+WIDTH = 1
+LENGTH = 1920
+EDGE = 'b'
+SEGMENTS = [:email, :irc, :network, :volume, :power, :battery]
+COLORS = {
+  clear: '000000',
+  present: '0000ff',
+  active: '00ffff',
+  alert: 'ff00ff',
+  good: '00ff00',
+  warn: 'ffff00',
+  critical: 'ff0000',
+}
