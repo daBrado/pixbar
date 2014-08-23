@@ -48,3 +48,10 @@ For example, to make the "email" segment turn the "active" color, one would just
     pixbarc email active
 
 If no color name or no color name and segment name is given on the command line, then those can be taken continuously on the standard input.
+
+## Credit
+
+Most information about using XCB came from two sources:
+
+- [XCB tutorial](http://xcb.freedesktop.org/tutorial/)
+- [bar ain't recursive - A lightweight xcb based bar](https://github.com/LemonBoy/bar)
