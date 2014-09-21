@@ -8,12 +8,13 @@ else
 endif
 LDFLAGS = -lxcb
 
+PREFIX ?= /usr
+BINDIR = ${PREFIX}/bin
+
 BIN = pixbar
 SRCS = pixbar.c
 OBJS = ${SRCS:.c=.o}
-
-PREFIX?=/usr
-BINDIR=${PREFIX}/bin
+ALLBIN = ${BIN} pixbard pixbarc
 
 .PHONY: all
 all: ${BIN}
@@ -24,6 +25,11 @@ all: ${BIN}
 ${BIN}: ${OBJS}
 	${CC} -o $@ $^ ${LDFLAGS}
 	${STRIP} -s $@
+
+.PHONY: install
+install:
+	mkdir -p ${BINDIR}
+	cp -f ${ALLBIN} ${BINDIR}
 
 .PHONY: clean
 clean:

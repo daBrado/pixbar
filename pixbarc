@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
-require_relative 'config'
+load "#{ENV['HOME']}/.pixbard"
+
 require 'socket'
 
 if ['-h','--help'].include? ARGV[0]

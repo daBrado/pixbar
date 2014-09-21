@@ -1,12 +1,33 @@
 #!/usr/bin/env ruby
 
-require_relative 'config'
+CONFIG = "#{ENV['HOME']}/.pixbard"
+if !File.exist? CONFIG; IO.write(CONFIG, %q[
+  PIXBAR = "#{File.dirname $0}/pixbar"
+  SOCKET_PATH = "#{ENV['XDG_RUNTIME_DIR']}/pixbard"
+  X = 0
+  Y = 1080
+  WIDTH = 1
+  LENGTH = 1920
+  EDGE = 'b'
+  SEGMENTS = [:email, :irc, :network, :volume, :battery]
+  COLORS = {
+    clear: '000000',
+    present: '0000ff',
+    active: '00ffff',
+    alert: 'ff00ff',
+    good: '00ff00',
+    warn: 'ffff00',
+    critical: 'ff0000',
+  }
+].lines.drop(1).map{|s|s[2..-1]}.join); end
+load CONFIG
+
 require 'socket'
 Thread.abort_on_exception = true
 
 class PixBar
-  def initialize(x, y, width, length, edge)
-    @pixbar = IO.popen ["#{File.dirname $0}/pixbar",x,y,width,length,edge].map{|v|v.to_s}, 'r+'
+  def initialize(pixbar, x, y, width, length, edge)
+    @pixbar = IO.popen [pixbar,x,y,width,length,edge].map{|v|v.to_s}, 'r+'
   end
   def color(color)
     @pixbar.puts "##{color}"
@@ -40,7 +61,7 @@ if ENV['NOTIFY_SOCKET']
   sysd_notify.puts 'READY=1'
 end
 
-pixbar = PixBar.new X, Y, WIDTH, LENGTH, EDGE
+pixbar = PixBar.new PIXBAR, X, Y, WIDTH, LENGTH, EDGE
 pixbar.color COLORS.first.last
 loop do
   line = queue.pop
