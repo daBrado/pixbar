@@ -8,9 +8,9 @@ To that end, also included is a simple Ruby script `pixbard` that provides a dae
 
 ## Install
 
-Run `make` to create the `pixbar` executable, and `make install` to put it and the other scripts in place (you may want to adjust `DESTDIR`), e.g.
+Run `make` to create the `pixbar` executable, and `make install` to put it and the other scripts in place (you may want to adjust `PREFIX`), e.g.
 
-    make && make install DESTDIR=$HOME/opt/pixbar
+    make && make install PREFIX=$HOME/opt/pixbar
 
 ## `pixbar`
 
