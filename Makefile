@@ -1,12 +1,12 @@
 CC ?= gcc
 STRIP ?= strip
-CFLAGS = -std=c99 -pedantic -Wall
+CFLAGS = -std=gnu99 -pedantic -Wall
 ifdef DEBUG
   CFLAGS += -g3
 else
   CFLAGS += -Os -DNDEBUG
 endif
-LDFLAGS = -lxcb
+LDFLAGS = -lxcb -lxcb-image
 
 PREFIX ?= /usr
 BINDIR = ${PREFIX}/bin

@@ -1,11 +1,14 @@
+#include <ctype.h>
+#include <poll.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <stdio.h>
 #include <unistd.h>
-#include <stdbool.h>
-#include <poll.h>
 #include <xcb/xcb.h>
+#include <xcb/xcb_image.h>
+
+// Some code learned from http://vincentsanders.blogspot.com/2010/04/xcb-programming-is-hard.html
 
 #define BUF_SIZE 1024
 
@@ -39,43 +42,6 @@ xcb_atom_t get_atom(xcb_connection_t *xconn, const char* name)
   return reply->atom;
 }
 
-bool get_ul(char** start, char* end, bool hex, uint32_t* value)
-{
-  char* pos = *start;
-  for(; pos!=end && (hex ? isxdigit(*pos) : isdigit(*pos)); pos++);
-  if (pos==end) return false;
-  char tmp = *pos;
-  *pos = '\0';
-  *value = strtoul(*start, NULL, hex ? 16 : 10);
-  *pos = tmp;
-  *start = pos;
-  return true;
-}
-
-void set_color(xcb_connection_t* xconn, xcb_colormap_t colormap, xcb_gcontext_t gc, uint32_t color)
-{
-  uint16_t r = ((color&0xff0000)>>16)*0xffff/0xff;
-  uint16_t g = ((color&0xff00)>>8)*0xffff/0xff;
-  uint16_t b = (color&0xff)*0xffff/0xff;
-  xcb_alloc_color_cookie_t cookie = xcb_alloc_color(xconn, colormap, r, g, b);
-  xcb_alloc_color_reply_t *reply = xcb_alloc_color_reply(xconn, cookie, NULL);
-  if (!reply) { fprintf(stderr, "could not allocate color\n"); return; }
-  xcb_change_gc(xconn, gc, XCB_GC_FOREGROUND, (const uint32_t []){ reply->pixel });
-  free(reply);
-}
-
-void draw_pixels(xcb_connection_t* xconn, xcb_pixmap_t pixmap, xcb_gcontext_t gc,
-  edge_t edge, uint16_t width, uint16_t pos, uint16_t count)
-{
-  const xcb_rectangle_t rect = {
-    (edge==TOP||edge==BOTTOM) ? pos : 0,
-    (edge==TOP||edge==BOTTOM) ? 0 : pos,
-    (edge==TOP||edge==BOTTOM) ? count : width,
-    (edge==TOP||edge==BOTTOM) ? width : count
-  };
-  XCB(poly_fill_rectangle, xconn, pixmap, gc, 1, &rect);
-}
-
 int main(int argc, const char** argv)
 {
   if (argc != 6) {
@@ -98,11 +64,41 @@ int main(int argc, const char** argv)
   xcb_connection_t *xconn = xcb_connect(NULL, NULL);
 
   xcb_screen_t *screen;
+  xcb_image_t *image;
   {
-    const xcb_setup_t *setup = xcb_get_setup (xconn);
-    xcb_screen_iterator_t iter = xcb_setup_roots_iterator (setup);
-    screen = iter.data;
+    const xcb_setup_t *setup = xcb_get_setup(xconn);
+    { // Get an X screen.
+      xcb_screen_iterator_t iter = xcb_setup_roots_iterator(setup);
+      screen = iter.data;
+    }
+    { // Get an X pixmap image with 24 bit depth and 32 bits per pixel.
+      xcb_format_t *fmt = xcb_setup_pixmap_formats(setup);
+      xcb_format_t *fmtend = fmt + xcb_setup_pixmap_formats_length(setup);
+      for (; fmt != fmtend; ++fmt) {
+        if((fmt->depth == 24) && (fmt->bits_per_pixel == 32)) {
+          break;
+        }
+      }
+      if (fmt == fmtend) {
+        fprintf(stderr, "could not find a suitable pixmap format\n"); exit(1);
+      }
+      unsigned char *image_data = (unsigned char *)malloc(length*4);
+      for (unsigned char *i = image_data; (i-image_data) < length*4; ++i) {
+        *i = 0;
+      }
+      image = xcb_image_create(
+        (edge==LEFT)||(edge==RIGHT) ? 1 : length,
+        (edge==LEFT)||(edge==RIGHT) ? length : 1,
+        XCB_IMAGE_FORMAT_Z_PIXMAP, fmt->scanline_pad, fmt->depth, fmt->bits_per_pixel, 0,
+        setup->image_byte_order, XCB_IMAGE_ORDER_LSB_FIRST, image_data, length*4, image_data);
+      if (image == NULL) {
+        fprintf(stderr, "could not create image\n"); exit(1);
+      }
+    }
   }
+
+  xcb_colormap_t colormap = xcb_generate_id(xconn);
+  XCB(create_colormap, xconn, XCB_COLORMAP_ALLOC_NONE, colormap, screen->root, screen->root_visual);
 
   uint16_t win_x = (edge==RIGHT) ? (x-width) : x;
   uint16_t win_y = (edge==BOTTOM) ? (y-width) : y;
@@ -118,12 +114,9 @@ int main(int argc, const char** argv)
   uint16_t strut_start = (edge==LEFT||edge==RIGHT) ? y : x;
   uint16_t strut_end = length;
 
-  xcb_colormap_t colormap = xcb_generate_id(xconn);
-  XCB(create_colormap, xconn, XCB_COLORMAP_ALLOC_NONE, colormap, screen->root, screen->root_visual);
-
   xcb_window_t window;
   {
-    window = xcb_generate_id (xconn);
+    window = xcb_generate_id(xconn);
     uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP;
     uint32_t values[] = { screen->black_pixel, XCB_EVENT_MASK_EXPOSURE, colormap };
     XCB(create_window,
@@ -172,7 +165,7 @@ int main(int argc, const char** argv)
   xcb_gcontext_t draw_gc = xcb_generate_id(xconn);
   XCB(create_gc, xconn, draw_gc, pixmap, XCB_GC_FOREGROUND | XCB_GC_BACKGROUND, (const uint32_t []){ screen->black_pixel, screen->black_pixel });
 
-  XCB(poly_fill_rectangle, xconn, pixmap, draw_gc, 1, (const xcb_rectangle_t []){ { 0, 0, win_width, win_height } });
+  xcb_image_put(xconn, pixmap, draw_gc, image, 0, 0, 0);
 
   XCB(map_window, xconn, window);
   xcb_flush(xconn);
@@ -182,11 +175,10 @@ int main(int argc, const char** argv)
     { .fd = xcb_get_file_descriptor(xconn), .events = POLLIN },
   };
   enum { POLLFD_STDIN, POLLFD_X, POLLFD_NUM };
-  enum {CMD, COLOR, POS, DRAW} readmode = CMD;
-  char buf[BUF_SIZE];
-  char* buf_start = buf;
-  char* buf_end = buf;
-  uint32_t pix_pos = 0;
+
+  char* buf = malloc(length*3);
+  char* buf_pos = buf;
+  char* buf_end = buf+(length*3);
   bool done = false;
   while (!done) {
     bool redraw = false;
@@ -194,8 +186,24 @@ int main(int argc, const char** argv)
     if (poll(pollfds, POLLFD_NUM, -1 /*timeout*/) > 0) {
       if (pollfds[POLLFD_STDIN].revents & POLLHUP) done = true;
       if (pollfds[POLLFD_STDIN].revents & POLLIN) {
-        ssize_t bytes = read(STDIN_FILENO, buf_end, BUF_SIZE-(buf_end-buf));
-        if (bytes <= 0) done = true; else buf_end += bytes;
+        ssize_t bytes = read(STDIN_FILENO, buf_pos, buf_end-buf_pos);
+        if (bytes <= 0) {
+          done = true;
+        } else {
+          for (; buf_pos!=buf+bytes; ++buf_pos) {
+            image->data[4*(buf_pos-buf)/3] = *buf_pos;
+          }
+          if (buf_pos == buf_end) {
+            for (uint16_t w = 0; w < width; ++w) {
+              xcb_image_put(xconn, pixmap, draw_gc, image,
+                (edge==LEFT)||(edge==RIGHT) ? w : 0,
+                (edge==LEFT)||(edge==RIGHT) ? 0 : w,
+                0);
+            }
+            buf_pos = buf;
+            redraw = true;
+          }
+        }
       }
       if (pollfds[POLLFD_X].revents & POLLIN) {
         while ((event = xcb_poll_for_event(xconn))) {
@@ -204,44 +212,9 @@ int main(int argc, const char** argv)
         }
       }
     }
-    for (char* prev_start=0; buf_start!=buf_end && buf_start!=prev_start;) {
-      prev_start = buf_start;
-      switch (readmode) {
-      case CMD:
-        switch (*buf_start) {
-        case '#':
-          readmode = COLOR; DOUT("color mode"); break;
-        case '@':
-          readmode = POS; DOUT("position mode"); break;
-        case '*':
-          readmode = DRAW; DOUT("draw mode"); break;
-        case '\n':
-          redraw = true; DOUT("request redraw"); break;
-        default:
-          fprintf(stderr, "unknown command %c\n", *buf_start); break;
-        }
-        buf_start++;
-        break;
-      case COLOR: ;
-        uint32_t color;
-        if (!get_ul(&buf_start, buf_end, true /*hex*/, &color)) break; DVOUT(color,"06x");
-        readmode = CMD;
-        set_color(xconn, colormap, draw_gc, color);
-        break;
-      case POS:
-        if (!get_ul(&buf_start, buf_end, false /*hex*/, &pix_pos)) break; DVOUT(pix_pos,"d");
-        readmode = CMD;
-        break;
-      case DRAW: ;
-        uint32_t count;
-        if (!get_ul(&buf_start, buf_end, false /*hex*/, &count)) break; DVOUT(count,"d");
-        readmode = CMD;
-        draw_pixels(xconn, pixmap, draw_gc, edge, width, pix_pos, count);
-        break;
-      }
-      if (readmode==CMD && buf_start==buf_end) { buf_start=buf_end=buf; DOUT("reset buf"); }
+    if (redraw) {
+      XCB(copy_area, xconn, pixmap, window, draw_gc, 0, 0, 0, 0, win_width, win_height); DOUT("draw pixmap");
     }
-    if (redraw) { XCB(copy_area, xconn, pixmap, window, draw_gc, 0, 0, 0, 0, win_width, win_height); DOUT("draw pixmap"); }
     xcb_flush(xconn);
   }
 
@@ -249,5 +222,6 @@ int main(int argc, const char** argv)
   XCB(free_pixmap, xconn, pixmap);
   XCB(free_colormap, xconn, colormap);
   xcb_disconnect(xconn);
+  free(buf);
   return 0;
 }
